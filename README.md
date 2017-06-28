@@ -1,2 +1,2 @@
-# rewrite
-Runtime code rewrite for Python
+# Rewrite
+Runtime code rewrite for Python.
