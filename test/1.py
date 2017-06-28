@@ -21,10 +21,11 @@ def haha(f, *args, **kwargs):
     print('in haha')
     print(f)
     print('done')
+    return f(*args, **kwargs)
 
 
 # @other_stuff
-@rewrite.rewrite(call_hook=123)
+@rewrite.rewrite(call_hook=haha)
 def func1():
     print('hhh')
     c = some_other(3)
