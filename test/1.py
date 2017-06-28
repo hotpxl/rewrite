@@ -10,7 +10,9 @@ import numpy as np
 
 
 def other_stuff(func):
-    return func
+    def wrapped_fn():
+        return func()
+    return wrapped_fn
 
 
 def some_other(func):
@@ -26,7 +28,8 @@ def hhh2(a):
     a.body[0].body[0].value.args[1].s = 'new hhh'
     return a
 
-# @other_stuff
+
+@other_stuff
 @rewrite.rewrite(call_advice=haha, post_function_hook=hhh2)
 def func1():
     print('hhh')
