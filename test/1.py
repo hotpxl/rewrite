@@ -25,7 +25,7 @@ def haha(f, *args, **kwargs):
 
 
 # @other_stuff
-@rewrite.rewrite(call_hook=haha)
+@rewrite.rewrite(call_advice=haha)
 def func1():
     print('hhh')
     c = some_other(3)
@@ -37,7 +37,7 @@ def func1():
 print('call')
 print(func1())
 
-# @rewrite.rewrite(call_hook=123)
+# @rewrite.rewrite(call_advice=123)
 # @some_other
 # def do_something():
 #     if a.sum() > 0:

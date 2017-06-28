@@ -9,23 +9,16 @@ import inspect
 import functools
 
 
-def rewrite(**kwargs):
+def rewrite(**rewrite_kwargs):
     def wrap(func):
-        if len(kwargs) == 0:
-            return func
         source_code = inspect.getsource(func)
 
         class Visitor(ast.NodeTransformer):
             def visit_Call(self, node):
-                # if isinstance(node.func, ast.Name):
-                #     print(node.func.id, node.func.ctx)
-                # else:
-                #     print(node.func.value, node.func.attr, node.func.ctx)
-                # print(' ' + str(node.args))
                 for i in ast.iter_child_nodes(node):
                     self.visit(i)
                 node.args.insert(0, node.func)
-                node.func = ast.Name(id='__call_hook', ctx=ast.Load())
+                node.func = ast.Name(id='__call_advice', ctx=ast.Load())
                 return node
 
         func_ast = ast.parse(source_code, mode='exec')
@@ -40,9 +33,15 @@ def rewrite(**kwargs):
         n = func_ast.body[0].name
         ast.fix_missing_locations(func_ast)
         print(ast.dump(func_ast))
-        g = func.__globals__
-        g['__call_hook'] = kwargs['call_hook']
+        g = func.__globals__.copy()
+        g['__call_advice'] = rewrite_kwargs['call_advice']
         exec(compile(func_ast, filename='<ast>', mode='exec'), g)
-        return g[n]
+
+        @functools.wraps(func)
+        def wrapped_func(*args, **kwargs):
+
+            return g[n](*args, **kwargs)
+
+        return wrapped_func
 
     return wrap
