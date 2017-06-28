@@ -18,14 +18,16 @@ def some_other(func):
 
 
 def haha(f, *args, **kwargs):
-    print('in haha')
-    print(f)
-    print('done')
+    print('in haha', f)
     return f(*args, **kwargs)
 
 
+def hhh2(a):
+    a.body[0].body[0].value.args[1].s = 'new hhh'
+    return a
+
 # @other_stuff
-@rewrite.rewrite(call_advice=haha)
+@rewrite.rewrite(call_advice=haha, post_function_hook=hhh2)
 def func1():
     print('hhh')
     c = some_other(3)
@@ -34,7 +36,7 @@ def func1():
     return b
 
 
-print('call')
+print(func1())
 print(func1())
 
 # @rewrite.rewrite(call_advice=123)

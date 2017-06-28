@@ -29,18 +29,23 @@ def rewrite(**rewrite_kwargs):
                     i.func, ast.Attribute) and i.func.attr == 'rewrite':
                 del func_ast.body[0].decorator_list[index]
                 break
-        func_ast.body[0].name += 'ak'
+        func_ast.body[0].name += '_rewritten'
         n = func_ast.body[0].name
         ast.fix_missing_locations(func_ast)
-        print(ast.dump(func_ast))
+        # print(ast.dump(func_ast))
         g = func.__globals__.copy()
         g['__call_advice'] = rewrite_kwargs['call_advice']
         exec(compile(func_ast, filename='<ast>', mode='exec'), g)
 
         @functools.wraps(func)
         def wrapped_func(*args, **kwargs):
-
-            return g[n](*args, **kwargs)
+            nonlocal func_ast
+            ret = g[n](*args, **kwargs)
+            new_ast = rewrite_kwargs['post_function_hook'](func_ast)
+            if new_ast is not None:
+                func_ast = new_ast
+                exec(compile(func_ast, filename='<ast>', mode='exec'), g)
+            return ret
 
         return wrapped_func
 
