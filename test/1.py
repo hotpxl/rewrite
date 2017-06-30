@@ -26,6 +26,7 @@ def haha(f, *args, **kwargs):
 
 def hhh2(a):
     a.body[0].body[0].value.args[1].s = 'new hhh'
+    # AST merge
     return a
 
 
@@ -33,9 +34,18 @@ def hhh2(a):
 @rewrite.rewrite(call_advice=haha, post_function_hook=hhh2)
 def func1():
     print('hhh')
+    #segment start
     c = some_other(3)
     a = np.random.normal(size=(3, 3))
     b = a * 20
+    #segment end
+    if b.sum() > 0:
+        print('>0')
+        # start
+        #
+        # end
+    else:
+        print('<=0')
     return b
 
 
