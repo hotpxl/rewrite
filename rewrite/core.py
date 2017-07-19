@@ -39,7 +39,8 @@ def rewrite(**rewrite_kwargs):
             for i in func_ast.body[0].body:
                 Visitor().visit(i)
         ast.fix_missing_locations(func_ast)
-        # print(ast.dump(func_ast))
+        print(pretty_print(func_ast))
+        # print(ast.dump(func_ast, include_attributes=True))
         exec(
             compile(func_ast, filename='<ast>', mode='exec'), global_namespace)
 
@@ -63,3 +64,36 @@ def rewrite(**rewrite_kwargs):
         return wrapped_func
 
     return wrap
+
+
+def pretty_print(node,
+                 annotate_fields=True,
+                 include_attributes=False,
+                 indent='  '):
+    def format(node, level=0):
+        if isinstance(node, ast.AST):
+            fields = [(i, format(j, level)) for i, j, in ast.iter_fields(node)]
+            if include_attributes and node._attributes:
+                fields.extend([(i, format(getattr(node, i), level))
+                               for i in node._attributes])
+            return ''.join([
+                node.__class__.__name__, '(',
+                ', '.join(('{}={}'.format(*field) for field in fields)
+                          if annotate_fields else (i for _, i in fields)), ')'
+            ])
+        elif isinstance(node, list):
+            lines = ['[']
+            lines.extend((indent * (level + 1) + format(i, level + 1) + ','
+                          for i in node))
+            if 1 < len(lines):
+                lines.append(indent * level + ']')
+            else:
+                lines[-1] += ']'
+            return '\n'.join(lines)
+        else:
+            return repr(node)
+
+    if not isinstance(node, ast.AST):
+        raise TypeError(
+            'Expected ast.AST, got {}.'.format(node.__class__.__name__))
+    return format(node)
