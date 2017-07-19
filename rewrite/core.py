@@ -39,8 +39,7 @@ def rewrite(**rewrite_kwargs):
             for i in func_ast.body[0].body:
                 Visitor().visit(i)
         ast.fix_missing_locations(func_ast)
-        print(pretty_print(func_ast))
-        # print(ast.dump(func_ast, include_attributes=True))
+        print(pretty_print(func_ast, include_attributes=True))
         exec(
             compile(func_ast, filename='<ast>', mode='exec'), global_namespace)
 
@@ -82,14 +81,12 @@ def pretty_print(node,
                           if annotate_fields else (i for _, i in fields)), ')'
             ])
         elif isinstance(node, list):
-            lines = ['[']
-            lines.extend((indent * (level + 1) + format(i, level + 1) + ','
-                          for i in node))
-            if 1 < len(lines):
-                lines.append(indent * level + ']')
+            lines = [indent * (level + 2) + format(i, level + 2) for i in node]
+            if 0 < len(lines):
+                return '[\n' + ',\n'.join(lines) + '\n' + indent * (
+                    level + 1) + ']'
             else:
-                lines[-1] += ']'
-            return '\n'.join(lines)
+                return '[]'
         else:
             return repr(node)
 
