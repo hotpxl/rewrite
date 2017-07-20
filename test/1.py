@@ -31,12 +31,23 @@ def hhh2(a):
     return a
 
 
+def display_function(func):
+    print(func)
+    return func
+
+
 @other_stuff
-@rewrite.rewrite(call_advice=haha, post_function_hook=hhh2)
+@rewrite.rewrite(function_advice=display_function)
 def func1():
+    def ak():
+        print('ak')
+    ak()
+    print(globals())
+    print(locals())
     print('hhh')
     #segment start
     c = some_other(3)
+    kk()
     a = np.random.normal(size=(3, 3))
     b = a * 20
     #segment end
@@ -48,6 +59,10 @@ def func1():
     else:
         print('<=0')
     return b
+
+
+def kk():
+    print('kk')
 
 
 func1()

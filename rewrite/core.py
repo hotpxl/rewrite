@@ -10,52 +10,97 @@ import functools
 
 _reentrance = False
 
+import sys
 
-def rewrite(**rewrite_kwargs):
+
+def trace(func):
+    def tracer(frame, event, arg):
+        print(frame, event, arg)
+        return tracer
+
+    @functools.wraps(func)
+    def wrapped_func(*args, **kwargs):
+        sys.settrace(tracer)
+        res = func(*args, **kwargs)
+        sys.settrace(None)
+        return res
+
+    return wrapped_func
+
+
+def rewrite(post_function_hook=None, function_advice=None):
     def wrap(func):
         global _reentrance
         if _reentrance:
             return func
         _reentrance = True
         source_code = inspect.getsource(func)
-        global_namespace = func.__globals__.copy()
+        global_namespace = func.__globals__
+        local_namespace = {}
         func_ast = ast.parse(source_code, mode='exec')
-        func_ast.body[0].name += '_rewritten'
-        new_name = func_ast.body[0].name
+        func_name = func_ast.body[0].name
 
-        if 'call_advice' in rewrite_kwargs:
-            global_namespace['__call_advice'] = rewrite_kwargs['call_advice']
+        evaluation_parameters = []
+        evaluation_arguments = []
+        if function_advice is not None:
+            evaluation_parameters.append(
+                ast.arg(arg='__function_advice', annotation=None))
+            evaluation_arguments.append(function_advice)
 
             class Visitor(ast.NodeTransformer):
                 def visit_Call(self, node):
                     for i in ast.iter_child_nodes(node):
                         self.visit(i)
-                    node.args.insert(0, node.func)
-                    node.args.insert(1, ast.Num(node.lineno))
-                    node.args.insert(2, ast.Num(node.col_offset))
-                    node.func = ast.Name(id='__call_advice', ctx=ast.Load())
+                    node.func = ast.Call(
+                        func=ast.Name(id='__function_advice', ctx=ast.Load()),
+                        ctx=ast.Load(),
+                        args=[node.func],
+                        keywords=[])
                     return node
 
             for i in func_ast.body[0].body:
                 Visitor().visit(i)
-        ast.fix_missing_locations(func_ast)
-        print(pretty_print(func_ast, include_attributes=True))
+
+            #print(pretty_print(func_ast, include_attributes=False))
+        evaluation_context = ast.Module(body=[
+            ast.FunctionDef(
+                name='evaluation_context',
+                args=ast.arguments(
+                    args=evaluation_parameters,
+                    vararg=None,
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    kwarg=None,
+                    defaults=[]),
+                body=[
+                    func_ast.body[0],
+                    ast.Return(value=ast.Name(id=func_name, ctx=ast.Load()))
+                ],
+                decorator_list=[],
+                returns=None)
+        ])
+        ast.fix_missing_locations(evaluation_context)
+        local_namespace = {}
         exec(
-            compile(func_ast, filename='<ast>', mode='exec'), global_namespace)
+            compile(evaluation_context, filename='<ast>', mode='exec'),
+            global_namespace, local_namespace)
+        new_func = local_namespace['evaluation_context'](*evaluation_arguments)
 
         @functools.wraps(func)
         def wrapped_func(*args, **kwargs):
             global _reentrance
             _reentrance = True
             nonlocal func_ast
-            ret = global_namespace[new_name](*args, **kwargs)
-            if 'post_function_hook' in rewrite_kwargs:
-                new_ast = rewrite_kwargs['post_function_hook'](func_ast)
-                if new_ast is not None:
-                    func_ast = new_ast
-                    exec(
-                        compile(func_ast, filename='<ast>', mode='exec'),
-                        global_namespace)
+            nonlocal new_func
+            ret = new_func(*args, **kwargs)
+            # if post_function_hook is not None:
+            #     new_ast = post_function_hook(func_ast)
+            #     if new_ast is not None:
+            #         func_ast = new_ast
+            #         exec(
+            #             compile(func_ast, filename='<ast>', mode='exec'),
+            #             global_namespace, local_namespace)
+            #         new_func = local_namespace[new_name]
             _reentrance = False
             return ret
 
