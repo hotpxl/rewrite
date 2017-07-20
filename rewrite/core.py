@@ -51,34 +51,15 @@ def add_type_tracing(function_ast):
     closure_arguments = []
     closure_parameters.append('__type_tracing')
 
-    nodes = []
-    node_id_counter = 0
-
-    class NodeSequencer(ast.NodeVisitor):
-        def visit_FunctionDef(self, node):
-            return
-
-        def visit_AsyncFunctionDef(self, node):
-            return
-
-        def visit_ClassDef(self, node):
-            return
-
-        def visit_BinOp(self, node):
-            for i in ast.iter_child_nodes(node):
-                self.visit(i)
-            nodes.append(node)
-
-    for i in function_ast.body[0].body:
-        NodeSequencer().visit(i)
+    node_cells = []
 
     def type_tracing(expr, node_id):
-        nodes[node_id].type = type(expr)
+        node_cells[node_id].type = type(expr)
         return expr
 
     closure_arguments.append(type_tracing)
 
-    class Visitor(ast.NodeTransformer):
+    class NodeTransformer(ast.NodeTransformer):
         # Do not recurse into inner definitions.
         def visit_FunctionDef(self, node):
             return node
@@ -90,18 +71,17 @@ def add_type_tracing(function_ast):
             return node
 
         def visit_BinOp(self, node):
-            nonlocal node_id_counter
             for i in ast.iter_child_nodes(node):
                 self.visit(i)
+            node_cells.append(node.original_node)
             ret = ast.Call(
                 func=ast.Name(id='__type_tracing', ctx=ast.Load()),
-                args=[node, ast.Num(n=node_id_counter)],
+                args=[node, ast.Num(n=len(node_cells) - 1)],
                 keywords=[])
-            node_id_counter += 1
             return ret
 
     for i in type_traced_function_ast.body[0].body:
-        Visitor().visit(i)
+        NodeTransformer().visit(i)
     return (type_traced_function_ast, closure_parameters, closure_arguments)
 
 
@@ -185,4 +165,25 @@ def pretty_print(node,
 
 
 def copy_ast(function_ast):
-    return copy.deepcopy(function_ast)
+    original_nodes = []
+
+    class NodeSequencer(ast.NodeVisitor):
+        def generic_visit(self, node):
+            original_nodes.append(node)
+            for i in ast.iter_child_nodes(node):
+                self.visit(i)
+
+    NodeSequencer().visit(function_ast)
+
+    new_ast = copy.deepcopy(function_ast)
+
+    class NodeTransformer(ast.NodeTransformer):
+        def generic_visit(self, node):
+            node.original_node = original_nodes.pop(0)
+            for i in ast.iter_child_nodes(node):
+                self.visit(i)
+            return node
+
+    NodeTransformer().visit(new_ast)
+
+    return new_ast
