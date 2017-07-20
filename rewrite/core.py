@@ -46,16 +46,34 @@ def evaluate_function_definition(function_ast, global_namespace,
 
 
 def add_type_tracing(function_ast):
+    type_traced_function_ast = copy_ast(function_ast)
     closure_parameters = []
     closure_arguments = []
     closure_parameters.append('__type_tracing')
 
-    nodes = {}
+    nodes = []
     node_id_counter = 0
 
+    class NodeSequencer(ast.NodeVisitor):
+        def visit_FunctionDef(self, node):
+            return
+
+        def visit_AsyncFunctionDef(self, node):
+            return
+
+        def visit_ClassDef(self, node):
+            return
+
+        def visit_BinOp(self, node):
+            for i in ast.iter_child_nodes(node):
+                self.visit(i)
+            nodes.append(node)
+
+    for i in function_ast.body[0].body:
+        NodeSequencer().visit(i)
+
     def type_tracing(expr, node_id):
-        print('>', expr, type(expr))
-        nodes[node_id] = type(expr)
+        nodes[node_id].type = type(expr)
         return expr
 
     closure_arguments.append(type_tracing)
@@ -75,21 +93,16 @@ def add_type_tracing(function_ast):
             nonlocal node_id_counter
             for i in ast.iter_child_nodes(node):
                 self.visit(i)
-            node.left = ast.Call(
+            ret = ast.Call(
                 func=ast.Name(id='__type_tracing', ctx=ast.Load()),
-                args=[node.left, ast.Num(n=node_id_counter)],
+                args=[node, ast.Num(n=node_id_counter)],
                 keywords=[])
             node_id_counter += 1
-            node.right = ast.Call(
-                func=ast.Name(id='__type_tracing', ctx=ast.Load()),
-                args=[node.right, ast.Num(n=node_id_counter)],
-                keywords=[])
-            node_id_counter += 1
-            return node
+            return ret
 
-    for i in function_ast.body[0].body:
+    for i in type_traced_function_ast.body[0].body:
         Visitor().visit(i)
-    return (function_ast, closure_parameters, closure_arguments)
+    return (type_traced_function_ast, closure_parameters, closure_arguments)
 
 
 def rewrite(post_function_hook=None, function_advice=None):
@@ -104,13 +117,13 @@ def rewrite(post_function_hook=None, function_advice=None):
         closure_parameters = []
         closure_arguments = []
 
-        function_ast, i, j = add_type_tracing(function_ast)
+        type_traced_function_ast, i, j = add_type_tracing(function_ast)
         closure_parameters.extend(i)
         closure_arguments.extend(j)
 
-        print(pretty_print(function_ast, include_attributes=False))
+        # print(pretty_print(function_ast, include_attributes=False))
         new_function = evaluate_function_definition(
-            function_ast, func.__globals__, closure_parameters,
+            type_traced_function_ast, func.__globals__, closure_parameters,
             closure_arguments)
 
         @functools.wraps(func)
@@ -120,6 +133,7 @@ def rewrite(post_function_hook=None, function_advice=None):
             nonlocal function_ast
             nonlocal new_function
             ret = new_function(*args, **kwargs)
+            print(pretty_print(function_ast, include_attributes=False))
             # if post_function_hook is not None:
             #     new_ast = post_function_hook(function_ast)
             #     if new_ast is not None:
@@ -147,6 +161,8 @@ def pretty_print(node,
             if include_attributes and node._attributes:
                 fields.extend([(i, format(getattr(node, i), level))
                                for i in node._attributes])
+            if hasattr(node, 'type'):
+                fields.append(('type', node.type.__name__))
             return ''.join([
                 type(node).__name__, '(',
                 ', '.join(('{}={}'.format(*field) for field in fields)
@@ -168,5 +184,5 @@ def pretty_print(node,
     return format(node)
 
 
-def copy(function_ast):
+def copy_ast(function_ast):
     return copy.deepcopy(function_ast)
