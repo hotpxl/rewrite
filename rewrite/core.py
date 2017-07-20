@@ -13,19 +13,33 @@ _reentrance = False
 import sys
 
 
-def trace(func):
-    def tracer(frame, event, arg):
-        print(frame, event, arg)
-        return tracer
-
-    @functools.wraps(func)
-    def wrapped_func(*args, **kwargs):
-        sys.settrace(tracer)
-        res = func(*args, **kwargs)
-        sys.settrace(None)
-        return res
-
-    return wrapped_func
+def evaluate_function_definition(function_ast, global_namespace,
+                                 evaluation_parameters, evaluation_arguments):
+    function_name = function_ast.body[0].name
+    evaluation_context = ast.Module(body=[
+        ast.FunctionDef(
+            name='evaluation_context',
+            args=ast.arguments(
+                args=evaluation_parameters,
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[]),
+            body=[
+                function_ast.body[0],
+                ast.Return(value=ast.Name(id=function_name, ctx=ast.Load()))
+            ],
+            decorator_list=[],
+            returns=None)
+    ])
+    ast.fix_missing_locations(evaluation_context)
+    local_namespace = {}
+    exec(
+        compile(evaluation_context, filename='<ast>', mode='exec'),
+        global_namespace, local_namespace)
+    ret = local_namespace['evaluation_context'](*evaluation_arguments)
+    return ret
 
 
 def rewrite(post_function_hook=None, function_advice=None):
@@ -35,10 +49,7 @@ def rewrite(post_function_hook=None, function_advice=None):
             return func
         _reentrance = True
         source_code = inspect.getsource(func)
-        global_namespace = func.__globals__
-        local_namespace = {}
-        func_ast = ast.parse(source_code, mode='exec')
-        func_name = func_ast.body[0].name
+        function_ast = ast.parse(source_code, mode='exec')
 
         evaluation_parameters = []
         evaluation_arguments = []
@@ -58,49 +69,29 @@ def rewrite(post_function_hook=None, function_advice=None):
                         keywords=[])
                     return node
 
-            for i in func_ast.body[0].body:
+            for i in function_ast.body[0].body:
                 Visitor().visit(i)
 
-            #print(pretty_print(func_ast, include_attributes=False))
-        evaluation_context = ast.Module(body=[
-            ast.FunctionDef(
-                name='evaluation_context',
-                args=ast.arguments(
-                    args=evaluation_parameters,
-                    vararg=None,
-                    kwonlyargs=[],
-                    kw_defaults=[],
-                    kwarg=None,
-                    defaults=[]),
-                body=[
-                    func_ast.body[0],
-                    ast.Return(value=ast.Name(id=func_name, ctx=ast.Load()))
-                ],
-                decorator_list=[],
-                returns=None)
-        ])
-        ast.fix_missing_locations(evaluation_context)
-        local_namespace = {}
-        exec(
-            compile(evaluation_context, filename='<ast>', mode='exec'),
-            global_namespace, local_namespace)
-        new_func = local_namespace['evaluation_context'](*evaluation_arguments)
+            #print(pretty_print(function_ast, include_attributes=False))
+        new_function = evaluate_function_definition(
+            function_ast, func.__globals__, evaluation_parameters,
+            evaluation_arguments)
 
         @functools.wraps(func)
         def wrapped_func(*args, **kwargs):
             global _reentrance
             _reentrance = True
-            nonlocal func_ast
-            nonlocal new_func
-            ret = new_func(*args, **kwargs)
+            nonlocal function_ast
+            nonlocal new_function
+            ret = new_function(*args, **kwargs)
             # if post_function_hook is not None:
-            #     new_ast = post_function_hook(func_ast)
+            #     new_ast = post_function_hook(function_ast)
             #     if new_ast is not None:
-            #         func_ast = new_ast
+            #         function_ast = new_ast
             #         exec(
-            #             compile(func_ast, filename='<ast>', mode='exec'),
+            #             compile(function_ast, filename='<ast>', mode='exec'),
             #             global_namespace, local_namespace)
-            #         new_func = local_namespace[new_name]
+            #         new_function = local_namespace[new_name]
             _reentrance = False
             return ret
 
