@@ -32,7 +32,7 @@ def hhh2(a):
 
 
 def display_function(func):
-    print(func)
+    print('>', func, type(func))
     return func
 
 
@@ -42,11 +42,11 @@ def func1():
     def ak():
         print('ak')
     ak()
-    print(globals())
-    print(locals())
-    print('hhh')
+    # print(globals())
+    # print(locals())
+    # print('hhh')
     #segment start
-    c = some_other(3)
+    c = some_other(3 + 4)
     kk()
     a = np.random.normal(size=(3, 3))
     b = a * 20

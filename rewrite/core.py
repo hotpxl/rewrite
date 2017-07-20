@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import ast
+import copy
 import types
 import inspect
 import functools
@@ -14,13 +15,15 @@ import sys
 
 
 def evaluate_function_definition(function_ast, global_namespace,
-                                 evaluation_parameters, evaluation_arguments):
+                                 closure_parameters, closure_arguments):
     function_name = function_ast.body[0].name
     evaluation_context = ast.Module(body=[
         ast.FunctionDef(
             name='evaluation_context',
             args=ast.arguments(
-                args=evaluation_parameters,
+                args=[
+                    ast.arg(arg=i, annotation=None) for i in closure_parameters
+                ],
                 vararg=None,
                 kwonlyargs=[],
                 kw_defaults=[],
@@ -38,8 +41,55 @@ def evaluate_function_definition(function_ast, global_namespace,
     exec(
         compile(evaluation_context, filename='<ast>', mode='exec'),
         global_namespace, local_namespace)
-    ret = local_namespace['evaluation_context'](*evaluation_arguments)
+    ret = local_namespace['evaluation_context'](*closure_arguments)
     return ret
+
+
+def add_type_tracing(function_ast):
+    closure_parameters = []
+    closure_arguments = []
+    closure_parameters.append('__type_tracing')
+
+    nodes = {}
+    node_id_counter = 0
+
+    def type_tracing(expr, node_id):
+        print('>', expr, type(expr))
+        nodes[node_id] = type(expr)
+        return expr
+
+    closure_arguments.append(type_tracing)
+
+    class Visitor(ast.NodeTransformer):
+        # Do not recurse into inner definitions.
+        def visit_FunctionDef(self, node):
+            return node
+
+        def visit_AsyncFunctionDef(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_BinOp(self, node):
+            nonlocal node_id_counter
+            for i in ast.iter_child_nodes(node):
+                self.visit(i)
+            node.left = ast.Call(
+                func=ast.Name(id='__type_tracing', ctx=ast.Load()),
+                args=[node.left, ast.Num(n=node_id_counter)],
+                keywords=[])
+            node_id_counter += 1
+            node.right = ast.Call(
+                func=ast.Name(id='__type_tracing', ctx=ast.Load()),
+                args=[node.right, ast.Num(n=node_id_counter)],
+                keywords=[])
+            node_id_counter += 1
+            return node
+
+    for i in function_ast.body[0].body:
+        Visitor().visit(i)
+    return (function_ast, closure_parameters, closure_arguments)
 
 
 def rewrite(post_function_hook=None, function_advice=None):
@@ -51,31 +101,17 @@ def rewrite(post_function_hook=None, function_advice=None):
         source_code = inspect.getsource(func)
         function_ast = ast.parse(source_code, mode='exec')
 
-        evaluation_parameters = []
-        evaluation_arguments = []
-        if function_advice is not None:
-            evaluation_parameters.append(
-                ast.arg(arg='__function_advice', annotation=None))
-            evaluation_arguments.append(function_advice)
+        closure_parameters = []
+        closure_arguments = []
 
-            class Visitor(ast.NodeTransformer):
-                def visit_Call(self, node):
-                    for i in ast.iter_child_nodes(node):
-                        self.visit(i)
-                    node.func = ast.Call(
-                        func=ast.Name(id='__function_advice', ctx=ast.Load()),
-                        ctx=ast.Load(),
-                        args=[node.func],
-                        keywords=[])
-                    return node
+        function_ast, i, j = add_type_tracing(function_ast)
+        closure_parameters.extend(i)
+        closure_arguments.extend(j)
 
-            for i in function_ast.body[0].body:
-                Visitor().visit(i)
-
-            #print(pretty_print(function_ast, include_attributes=False))
+        print(pretty_print(function_ast, include_attributes=False))
         new_function = evaluate_function_definition(
-            function_ast, func.__globals__, evaluation_parameters,
-            evaluation_arguments)
+            function_ast, func.__globals__, closure_parameters,
+            closure_arguments)
 
         @functools.wraps(func)
         def wrapped_func(*args, **kwargs):
@@ -112,7 +148,7 @@ def pretty_print(node,
                 fields.extend([(i, format(getattr(node, i), level))
                                for i in node._attributes])
             return ''.join([
-                node.__class__.__name__, '(',
+                type(node).__name__, '(',
                 ', '.join(('{}={}'.format(*field) for field in fields)
                           if annotate_fields else (i for _, i in fields)), ')'
             ])
@@ -128,5 +164,9 @@ def pretty_print(node,
 
     if not isinstance(node, ast.AST):
         raise TypeError(
-            'Expected ast.AST, got {}.'.format(node.__class__.__name__))
+            'Expected ast.AST, got {}.'.format(type(node).__name__))
     return format(node)
+
+
+def copy(function_ast):
+    return copy.deepcopy(function_ast)
