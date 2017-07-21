@@ -60,6 +60,17 @@ def add_type_tracing(function_ast):
     closure_arguments.append(type_tracing)
 
     class NodeTransformer(ast.NodeTransformer):
+        def trace_node(self, node):
+            for i in ast.iter_child_nodes(node):
+                self.visit(i)
+            node_cells.append(node.original_node)
+            # TODO: do not add tracing if it already has type information
+            ret = ast.Call(
+                func=ast.Name(id='__type_tracing', ctx=ast.Load()),
+                args=[node, ast.Num(n=len(node_cells) - 1)],
+                keywords=[])
+            return ret
+
         # Do not recurse into inner definitions.
         def visit_FunctionDef(self, node):
             return node
@@ -70,15 +81,29 @@ def add_type_tracing(function_ast):
         def visit_ClassDef(self, node):
             return node
 
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_BoolOp(self, node):
+            return self.trace_node(node)
+
         def visit_BinOp(self, node):
-            for i in ast.iter_child_nodes(node):
-                self.visit(i)
-            node_cells.append(node.original_node)
-            ret = ast.Call(
-                func=ast.Name(id='__type_tracing', ctx=ast.Load()),
-                args=[node, ast.Num(n=len(node_cells) - 1)],
-                keywords=[])
-            return ret
+            return self.trace_node(node)
+
+        def visit_UnaryOp(self, node):
+            return self.trace_node(node)
+
+        def visit_IfExp(self, node):
+            return self.trace_node(node)
+
+        def visit_Call(self, node):
+            return self.trace_node(node)
+
+        def visit_Name(self, node):
+            if node.ctx != ast.Load():
+                return node
+            else:
+                return self.trace_node(node)
 
     for i in type_traced_function_ast.body[0].body:
         NodeTransformer().visit(i)
