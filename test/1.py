@@ -39,23 +39,8 @@ def display_function(func):
 @other_stuff
 @rewrite.rewrite(function_advice=display_function)
 def func1():
-    def ak():
-        print('ak')
-        return 3
-    ak()
-    print('hhh')
-    #segment start
-    c = some_other(3 + 4)
-    kk()
-    a = np.random.normal(size=(3, 3))
-    b = a * 20
-    #segment end
-    if b.sum() > 0:
-        print('>0')
-        c = np.add(c, 100)
-    else:
-        print('<=0')
-        c = np.add(c, 200)
+    b=0
+    b = b + 1
     return b
 
 

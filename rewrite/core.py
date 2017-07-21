@@ -59,8 +59,7 @@ def add_type_tracing(function_ast):
 
     class NodeTransformer(ast.NodeTransformer):
         def trace_node(self, node):
-            for i in ast.iter_child_nodes(node):
-                self.visit(i)
+            node = self.generic_visit(node)
             # Do not add tracing if it already has type information.
             if hasattr(node.stem_node, 'type'):
                 return node
@@ -140,8 +139,7 @@ def add_function_tracing(function_ast):
             return node
 
         def visit_Call(self, node):
-            for i in ast.iter_child_nodes(node):
-                self.visit(i)
+            node = self.generic_visit(node)
             # Do not add tracing if it already has function information.
             if hasattr(node.stem_node, 'ref'):
                 return node
@@ -175,11 +173,11 @@ def rewrite(post_function_hook=None, function_advice=None):
         traced_function_ast, i, j = add_type_tracing(function_ast)
         closure_parameters.extend(i)
         closure_arguments.extend(j)
-        traced_function_ast, i, j = add_function_tracing(traced_function_ast)
-        closure_parameters.extend(i)
-        closure_arguments.extend(j)
+        # traced_function_ast, i, j = add_function_tracing(traced_function_ast)
+        # closure_parameters.extend(i)
+        # closure_arguments.extend(j)
 
-        # print(pretty_print(type_traced_function_ast, include_attributes=False))
+        print(pretty_print(traced_function_ast, include_attributes=False))
         new_function = evaluate_function_definition(
             traced_function_ast, func.__globals__, closure_parameters,
             closure_arguments)
@@ -192,6 +190,7 @@ def rewrite(post_function_hook=None, function_advice=None):
             nonlocal new_function
             ret = new_function(*args, **kwargs)
             print(pretty_print(function_ast, include_attributes=False))
+            # TODO: recompile AST to reflect changes
             # if post_function_hook is not None:
             #     new_ast = post_function_hook(function_ast)
             #     if new_ast is not None:
