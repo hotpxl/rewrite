@@ -11,8 +11,6 @@ import functools
 
 _reentrance = False
 
-import sys
-
 
 def evaluate_function_definition(function_ast, global_namespace,
                                  closure_parameters, closure_arguments):
@@ -114,6 +112,54 @@ def add_type_tracing(function_ast):
     return (type_traced_function_ast, closure_parameters, closure_arguments)
 
 
+def add_function_tracing(function_ast):
+    function_traced_function_ast = copy_ast(function_ast)
+    closure_parameters = []
+    closure_arguments = []
+    closure_parameters.append('__function_tracing')
+    node_cells = []
+
+    def function_tracing(f, node_id):
+        node_cells[node_id].ref = f
+        return f
+
+    closure_arguments.append(function_tracing)
+
+    class NodeTransformer(ast.NodeTransformer):
+        # Do not recurse into inner definitions.
+        def visit_FunctionDef(self, node):
+            return node
+
+        def visit_AsyncFunctionDef(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_Call(self, node):
+            for i in ast.iter_child_nodes(node):
+                self.visit(i)
+            # Do not add tracing if it already has function information.
+            if hasattr(node.stem_node, 'ref'):
+                return node
+            node_cells.append(node.stem_node)
+            node.func = ast.Call(
+                func=ast.Name(id='__function_tracing', ctx=ast.Load()),
+                args=[node.func, ast.Num(n=len(node_cells) - 1)],
+                keywords=[])
+            return node
+
+    function_traced_function_ast.body[0].body = [
+        NodeTransformer().visit(i)
+        for i in function_traced_function_ast.body[0].body
+    ]
+    return (function_traced_function_ast, closure_parameters,
+            closure_arguments)
+
+
 def rewrite(post_function_hook=None, function_advice=None):
     def wrap(func):
         global _reentrance
@@ -126,13 +172,16 @@ def rewrite(post_function_hook=None, function_advice=None):
         closure_parameters = []
         closure_arguments = []
 
-        type_traced_function_ast, i, j = add_type_tracing(function_ast)
+        traced_function_ast, i, j = add_type_tracing(function_ast)
+        closure_parameters.extend(i)
+        closure_arguments.extend(j)
+        traced_function_ast, i, j = add_function_tracing(traced_function_ast)
         closure_parameters.extend(i)
         closure_arguments.extend(j)
 
         # print(pretty_print(type_traced_function_ast, include_attributes=False))
         new_function = evaluate_function_definition(
-            type_traced_function_ast, func.__globals__, closure_parameters,
+            traced_function_ast, func.__globals__, closure_parameters,
             closure_arguments)
 
         @functools.wraps(func)
@@ -163,6 +212,7 @@ def rewrite(post_function_hook=None, function_advice=None):
 def pretty_print(node,
                  annotate_fields=True,
                  include_attributes=False,
+                 extra_attributes=['type', 'ref'],
                  indent='  '):
     def format(node, level=0):
         if isinstance(node, ast.AST):
@@ -170,8 +220,9 @@ def pretty_print(node,
             if include_attributes and node._attributes:
                 fields.extend([(i, format(getattr(node, i), level))
                                for i in node._attributes])
-            if hasattr(node, 'type'):
-                fields.append(('type', node.type.__name__))
+            for i in extra_attributes:
+                if hasattr(node, i):
+                    fields.append((i, getattr(node, i).__name__))
             return ''.join([
                 type(node).__name__, '(',
                 ', '.join(('{}={}'.format(*field) for field in fields)

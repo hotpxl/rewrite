@@ -52,11 +52,10 @@ def func1():
     #segment end
     if b.sum() > 0:
         print('>0')
-        # start
-        #
-        # end
+        c = np.add(c, 100)
     else:
         print('<=0')
+        c = np.add(c, 200)
     return b
 
 
