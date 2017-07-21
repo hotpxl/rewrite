@@ -63,8 +63,10 @@ def add_type_tracing(function_ast):
         def trace_node(self, node):
             for i in ast.iter_child_nodes(node):
                 self.visit(i)
+            # Do not add tracing if it already has type information.
+            if hasattr(node.stem_node, 'type'):
+                return node
             node_cells.append(node.stem_node)
-            # TODO: do not add tracing if it already has type information
             ret = ast.Call(
                 func=ast.Name(id='__type_tracing', ctx=ast.Load()),
                 args=[node, ast.Num(n=len(node_cells) - 1)],
@@ -128,7 +130,7 @@ def rewrite(post_function_hook=None, function_advice=None):
         closure_parameters.extend(i)
         closure_arguments.extend(j)
 
-        print(pretty_print(type_traced_function_ast, include_attributes=False))
+        # print(pretty_print(type_traced_function_ast, include_attributes=False))
         new_function = evaluate_function_definition(
             type_traced_function_ast, func.__globals__, closure_parameters,
             closure_arguments)
