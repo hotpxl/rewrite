@@ -41,10 +41,9 @@ def display_function(func):
 def func1():
     def ak():
         print('ak')
+        return 3
     ak()
-    # print(globals())
-    # print(locals())
-    # print('hhh')
+    print('hhh')
     #segment start
     c = some_other(3 + 4)
     kk()

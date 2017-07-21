@@ -63,7 +63,7 @@ def add_type_tracing(function_ast):
         def trace_node(self, node):
             for i in ast.iter_child_nodes(node):
                 self.visit(i)
-            node_cells.append(node.original_node)
+            node_cells.append(node.stem_node)
             # TODO: do not add tracing if it already has type information
             ret = ast.Call(
                 func=ast.Name(id='__type_tracing', ctx=ast.Load()),
@@ -100,13 +100,15 @@ def add_type_tracing(function_ast):
             return self.trace_node(node)
 
         def visit_Name(self, node):
-            if node.ctx != ast.Load():
+            if not isinstance(node.ctx, ast.Load):
                 return node
             else:
                 return self.trace_node(node)
 
-    for i in type_traced_function_ast.body[0].body:
+    type_traced_function_ast.body[0].body = [
         NodeTransformer().visit(i)
+        for i in type_traced_function_ast.body[0].body
+    ]
     return (type_traced_function_ast, closure_parameters, closure_arguments)
 
 
@@ -126,7 +128,7 @@ def rewrite(post_function_hook=None, function_advice=None):
         closure_parameters.extend(i)
         closure_arguments.extend(j)
 
-        # print(pretty_print(function_ast, include_attributes=False))
+        print(pretty_print(type_traced_function_ast, include_attributes=False))
         new_function = evaluate_function_definition(
             type_traced_function_ast, func.__globals__, closure_parameters,
             closure_arguments)
@@ -204,7 +206,9 @@ def copy_ast(function_ast):
 
     class NodeTransformer(ast.NodeTransformer):
         def generic_visit(self, node):
-            node.original_node = original_nodes.pop(0)
+            n = original_nodes.pop(0)
+            node.original_node = n
+            node.stem_node = getattr(n, 'stem_node', n)
             for i in ast.iter_child_nodes(node):
                 self.visit(i)
             return node
